@@ -12,21 +12,16 @@ import Tribler.Test.GUI.FakeTriblerAPI.tribler_utils as tribler_utils
 
 
 class MetadataEndpoint(resource.Resource):
-
     def __init__(self):
         resource.Resource.__init__(self)
 
-        child_handler_dict = {
-            b"channels": ChannelsEndpoint,
-            b"torrents": TorrentsEndpoint
-        }
+        child_handler_dict = {b"channels": ChannelsEndpoint, b"torrents": TorrentsEndpoint}
 
         for path, child_cls in child_handler_dict.items():
             self.putChild(path, child_cls())
 
 
 class BaseChannelsEndpoint(resource.Resource):
-
     @staticmethod
     def return_404(request, message="the channel with the provided cid is not known"):
         """
@@ -37,21 +32,16 @@ class BaseChannelsEndpoint(resource.Resource):
 
 
 class ChannelsEndpoint(BaseChannelsEndpoint):
-
     def __init__(self):
         BaseChannelsEndpoint.__init__(self)
 
-        child_handler_dict = {
-            b"popular": ChannelsPopularEndpoint
-        }
+        child_handler_dict = {b"popular": ChannelsPopularEndpoint}
         for path, child_cls in child_handler_dict.items():
             self.putChild(path, child_cls())
 
     def getChild(self, path, request):
         if path == b"popular":
             return ChannelsPopularEndpoint()
-        elif path == b"count":
-            return ChannelsCountEndpoint()
 
         return ChannelPublicKeyEndpoint(path)
 
@@ -63,7 +53,7 @@ class ChannelsEndpoint(BaseChannelsEndpoint):
         first = 1 if b'first' not in parameters else int(parameters[b'first'][0])  # TODO check integer!
         last = 50 if b'last' not in parameters else int(parameters[b'last'][0])  # TODO check integer!
         sort_by = None if b'sort_by' not in parameters else parameters[b'sort_by'][0]  # TODO check integer!
-        sort_asc = True if b'sort_asc' not in parameters else bool(int(parameters[b'sort_asc'][0]))
+        sort_asc = True if b'sort_desc' not in parameters else bool(int(parameters[b'sort_desc'][0]))
         query_filter = None if b'filter' not in parameters else parameters[b'filter'][0]
 
         if query_filter:
@@ -78,26 +68,15 @@ class ChannelsEndpoint(BaseChannelsEndpoint):
 
     def render_GET(self, request):
         first, last, sort_by, sort_asc, query_filter, subscribed = ChannelsEndpoint.sanitize_parameters(request.args)
-        channels, total = tribler_utils.tribler_data.get_channels(first, last, sort_by, sort_asc, query_filter,
-                                                                  subscribed)
-        return json.twisted_dumps({
-            "results": channels,
-            "first": first,
-            "last": last,
-            "sort_by": sort_by.decode('utf-8'),
-            "sort_asc": int(sort_asc),
-        })
-
-
-class ChannelsCountEndpoint(BaseChannelsEndpoint):
-    def render_GET(self, request):
-        first, last, sort_by, sort_asc, query_filter, subscribed = ChannelsEndpoint.sanitize_parameters(request.args)
-        _, total = tribler_utils.tribler_data.get_channels(first, last, sort_by, sort_asc, query_filter, subscribed)
-        return json.twisted_dumps({"total": total})
+        channels, total = tribler_utils.tribler_data.get_channels(
+            first, last, sort_by, sort_asc, query_filter, subscribed
+        )
+        return json.twisted_dumps(
+            {"results": channels, "first": first, "last": last, "sort_by": sort_by.decode('utf-8')), "sort_desc": int(sort_asc)}
+        )
 
 
 class ChannelPublicKeyEndpoint(BaseChannelsEndpoint):
-
     def getChild(self, path, request):
         return SpecificChannelEndpoint(self.channel_pk, path)
 
@@ -107,7 +86,6 @@ class ChannelPublicKeyEndpoint(BaseChannelsEndpoint):
 
 
 class SpecificChannelEndpoint(resource.Resource):
-
     def __init__(self, channel_pk, path):
         resource.Resource.__init__(self)
         self.channel_pk = channel_pk
@@ -138,12 +116,10 @@ class SpecificChannelEndpoint(resource.Resource):
 
 
 class SpecificChannelTorrentsEndpoint(BaseChannelsEndpoint):
-
     def __init__(self, channel_pk, channel_id):
         BaseChannelsEndpoint.__init__(self)
         self.channel_pk = channel_pk
         self.channel_id = channel_id
-        self.putChild(b"count", SpecificChannelTorrentsCountEndpoint(self.channel_pk, self.channel_id))
 
     @staticmethod
     def sanitize_parameters(parameters):
@@ -153,7 +129,7 @@ class SpecificChannelTorrentsEndpoint(BaseChannelsEndpoint):
         first = 1 if b'first' not in parameters else int(parameters[b'first'][0])  # TODO check integer!
         last = 50 if b'last' not in parameters else int(parameters[b'last'][0])  # TODO check integer!
         sort_by = None if b'sort_by' not in parameters else parameters[b'sort_by'][0]  # TODO check integer!
-        sort_asc = True if b'sort_asc' not in parameters else bool(int(parameters[b'sort_asc'][0]))
+        sort_asc = True if b'sort_desc' not in parameters else bool(int(parameters[b'sort_desc'][0]))
         query_filter = None if b'filter' not in parameters else parameters[b'filter'][0]
 
         channel = b''
@@ -168,44 +144,25 @@ class SpecificChannelTorrentsEndpoint(BaseChannelsEndpoint):
 
     def render_GET(self, request):
         first, last, sort_by, sort_asc, query_filter, channel = SpecificChannelTorrentsEndpoint.sanitize_parameters(
-            request.args)
+            request.args
+        )
         channel_obj = tribler_utils.tribler_data.get_channel_with_public_key(self.channel_pk)
         if not channel_obj:
             return SpecificChannelTorrentsEndpoint.return_404(request)
 
         torrents, total = tribler_utils.tribler_data.get_torrents(first, last, sort_by, sort_asc, query_filter, channel)
-        return json.twisted_dumps({
-            "results": torrents,
-            "first": first,
-            "last": last,
-            "sort_by": sort_by,
-            "sort_asc": int(sort_asc),
-        })
-
-
-class SpecificChannelTorrentsCountEndpoint(SpecificChannelTorrentsEndpoint):
-
-    def __init__(self, channel_pk, channel_id):
-        BaseChannelsEndpoint.__init__(self)
-        self.channel_pk = channel_pk
-        self.channel_id = channel_id
-
-    def render_GET(self, request):
-        first, last, sort_by, sort_asc, query_filter, channel = SpecificChannelTorrentsEndpoint.sanitize_parameters(
-            request.args)
-        _, total = tribler_utils.tribler_data.get_torrents(first, last, sort_by, sort_asc, query_filter, channel)
-        return json.twisted_dumps({"total": total})
+        return json.twisted_dumps(
+            {"results": torrents, "first": first, "last": last, "sort_by": sort_by, "sort_desc": int(sort_asc)}
+        )
 
 
 class ChannelsPopularEndpoint(BaseChannelsEndpoint):
-
     def render_GET(self, _request):
         results_json = [channel.get_json() for channel in sample(tribler_utils.tribler_data.channels, 20)]
         return json.twisted_dumps({"channels": results_json})
 
 
 class TorrentsEndpoint(resource.Resource):
-
     def getChild(self, path, request):
         if path == b"random":
             return TorrentsRandomEndpoint()
@@ -214,14 +171,13 @@ class TorrentsEndpoint(resource.Resource):
 
 
 class TorrentsRandomEndpoint(resource.Resource):
-
     def render_GET(self, _request):
-        return json.twisted_dumps({"torrents": [torrent.get_json()
-                                        for torrent in sample(tribler_utils.tribler_data.torrents, 20)]})
+        return json.twisted_dumps(
+            {"torrents": [torrent.get_json() for torrent in sample(tribler_utils.tribler_data.torrents, 20)]}
+        )
 
 
 class SpecificTorrentEndpoint(resource.Resource):
-
     def __init__(self, infohash):
         resource.Resource.__init__(self)
         self.infohash = unhexlify(infohash)
@@ -238,7 +194,6 @@ class SpecificTorrentEndpoint(resource.Resource):
 
 
 class SpecificTorrentHealthEndpoint(resource.Resource):
-
     def __init__(self, infohash):
         resource.Resource.__init__(self)
         self.infohash = infohash
@@ -252,14 +207,9 @@ class SpecificTorrentHealthEndpoint(resource.Resource):
         def update_health():
             if not request.finished:
                 torrent.update_health()
-                request.write(json.twisted_dumps({
-                    "health": {
-                        "DHT": {
-                            "seeders": torrent.num_seeders,
-                            "leechers": torrent.num_leechers
-                        }
-                    }
-                }))
+                request.write(
+                    json.twisted_dumps({"health": {"DHT": {"seeders": torrent.num_seeders, "leechers": torrent.num_leechers}}})
+                )
                 request.finish()
 
         reactor.callLater(randint(0, 5), update_health)
